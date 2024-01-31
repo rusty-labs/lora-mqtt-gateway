@@ -37,7 +37,7 @@ std::chrono::steady_clock::time_point lastUpdateTime;
 void displayMcuInit();
 void displaySendReceive();
 
-String displayLines[5] = {"...", "...", "...", "...", "..."};
+std::array<String, 5> displayLines = {"...", "...", "...", "...", "..."};
 
 extern SSD1306Wire display;
 
@@ -69,7 +69,7 @@ void MqttReceiverCallback(char *topic, byte *inFrame, unsigned int length)
   {
     if (messageTemp == "online")
     {
-      // send discovery if home assistant rebooted
+      // send discovery if home assistant was rebooted
       sensorSet.clear();
     }
   }
@@ -80,7 +80,7 @@ void statusDisplay()
   display.clear();
   display.setTextAlignment(TEXT_ALIGN_LEFT);
   display.setFont(ArialMT_Plain_10);
-  for (int i = 0; i < 5; i++)
+  for (int i = 0; i < displayLines.size(); i++)
   {
     display.drawString(1, 12 * i, displayLines[i]);
   }
@@ -134,7 +134,6 @@ bool connectMqtt()
       Serial.print("failed, rc=");
       Serial.print(mqttClient.state());
       Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
       delay(5000);
     }
 
@@ -148,13 +147,11 @@ void initDisplay()
 {
   display.init();
   display.flipScreenVertically();
-  display.setFont(ArialMT_Plain_10);
-
-  delay(1000);
+  display.setFont(ArialMT_Plain_10);  
   display.clear();
-
-  display.drawString(0, 0, "Heltec.LoRa Initial success!");
+  display.drawString(0, 0, "Hello!");
   display.display();
+  delay(1000);
 }
 
 void setup()
@@ -166,8 +163,6 @@ void setup()
   initDisplay();
   initLora();
   initMqtt();
-
-  delay(1000);
 }
 
 bool connectWiFi()
@@ -223,7 +218,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
   NodeMqtt nodeMqtt(nodeLora);
 
-  if (nodeLora.getCommand() == NodeCommand::handshake)
+  if (nodeLora.getCommand() == NodeCommand::discovery)
   {
     // send discovery if sensor rebooted with new settings
     nodeMqtt.publishDiscovery(mqttClient);
@@ -233,8 +228,9 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     auto it = sensorSet.find(nodeLora.getUniqueId());
     if (it == sensorSet.end())
     {
-      // send discovery if gateway rebooted
       sensorSet.emplace(nodeLora.getUniqueId());
+      // send discovery if gateway rebooted
+      nodeMqtt.publishDiscovery(mqttClient);
     }
   }
 
@@ -273,13 +269,13 @@ void loop()
     displayLines[i] = line.c_str();
     i++;
 
-    if (i > 4)
+    if (i >= displayLines.size() )
     {
       break;
     }
   }
 
-  while (listOfSensors.size() > 4)
+  while (listOfSensors.size() > displayLines.size() - 1)
   {
     listOfSensors.pop_front();
   }

@@ -20,7 +20,7 @@ uint8_t calculateXORChecksum(const uint8_t *data, uint16_t size)
 
 enum class NodeCommand : uint8_t
 {
-    handshake,
+    discovery,
     state
     // add a new command here
 };
@@ -29,19 +29,22 @@ class NodeLora
 {
 public:
     template <class T>
-    void addSensor(SensorType sensType, SensorDataType sensDataType, const std::string &dataUnit, const T &data)
+    void addSensor(SensorType type, SensorDataType dataType, const std::string &dataUnit, const T &data)
     {
-        _sensors.emplace_back(sensType, sensDataType, dataUnit, data);
+        _sensors.emplace_back(type, dataType, dataUnit, data);
     }
 
     std::array<uint8_t, 4> _fixedPropVec{'r', 'y', 0, 0};
+
+    // Each node can contain up to 255 sensors
     std::vector<Sensor> _sensors;
 
     NodeLora() {}
 
+    // uniqueId, each node should have an unique id
     NodeLora(uint8_t uniqueId, NodeCommand command)
     {
-        _fixedPropVec[2] = uniqueId; // up to 255 nodes can be used, each node should have a unique id, each node can contain up to 255 sensors
+        _fixedPropVec[2] = uniqueId;
         _fixedPropVec[3] = static_cast<uint8_t>(command);
     }
 

@@ -1,14 +1,15 @@
+#include <functional>
+
 #include "loraSettings.h"
+#include "medianFilter.h"
 #include "nodeLora.h"
 
 #include "LoRaWan_APP.h"
 #include "Wire.h"
-// #include "Arduino.h"
 
 #include <Adafruit_MLX90614.h>
 
 Adafruit_MLX90614 mlx = Adafruit_MLX90614();
-
 /*
  * set LoraWan_RGB to 1,the RGB active in loraWan
  * RGB red means sending;
@@ -18,17 +19,17 @@ Adafruit_MLX90614 mlx = Adafruit_MLX90614();
 #define LoraWan_RGB 0
 #endif
 
-void OnTxDone(void);
-void OnTxTimeout(void);
+void OnTxDone();
+void OnTxTimeout();
 
-typedef enum
+enum class STATES : uint8_t
 {
-  LOWPOWER,
-  ReadSensors,
+  LOW_POWER,
+  READ_SENSORS,
   TX
-} States_t;
+};
 
-States_t state;
+STATES state;
 
 uint16_t voltage = 0;
 float objectTemperature = 0;
@@ -66,68 +67,66 @@ void setup()
                     LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
                     true, 0, 0, LORA_IQ_INVERSION_ON, 3000);
 
-  state = ReadSensors;
+  state = STATES::READ_SENSORS;
 
   initMlx();
+}
+
+template<class T>
+T getMedianValue(std::function<T()> getValueFunction)
+{
+      MedianFilter<T, 5> medianFilter;
+      for(uint32_t i = 0; i<medianFilter.size(); ++i)
+      {
+        medianFilter.set(i, getValueFunction());
+      }
+      return medianFilter.getMedian();
 }
 
 void loop()
 {
   switch (state)
   {
-  case TX:
+  case STATES::TX:
   {
     turnOnRGB(COLOR_SEND, 0);
 
-    float fVoltage = voltage;    
-
-    NodeLora sensorLora(0, firstRun ? NodeCommand::handshake : NodeCommand::state);    
+    NodeLora nodeLora(0, firstRun ? NodeCommand::discovery : NodeCommand::state);    
     firstRun = false;
 
-    sensorLora.addSensor(SensorType::temperature, SensorDataType::floatType, "°C", ambientTemperature);
-    sensorLora.addSensor(SensorType::temperature, SensorDataType::floatType, "°C", objectTemperature);
-    sensorLora.addSensor(SensorType::voltage, SensorDataType::floatType, "mV", fVoltage);
+    nodeLora.addSensor(SensorType::temperature, SensorDataType::floatType, "°C", ambientTemperature);
+    nodeLora.addSensor(SensorType::temperature, SensorDataType::floatType, "°C", objectTemperature);
+    nodeLora.addSensor(SensorType::voltage, SensorDataType::uint16_t, "mV", voltage);
     
-    auto dataVec = sensorLora.encode();
+    auto dataVec = nodeLora.encode();
 
     Serial.printf("\r\nsending packet, length %d\r\n", dataVec.size());
     Radio.Send(dataVec.data(), dataVec.size());
     
-    state = LOWPOWER;
+    state = STATES::LOW_POWER;
     break;
   }
-  case LOWPOWER:
+  case STATES::LOW_POWER:
   {
-    lowPowerHandler();
-    delay(100);
     turnOffRGB();
+    lowPowerHandler();    
     delay(60000); // LowPower time
-    state = ReadSensors;
+    state = STATES::READ_SENSORS;
     break;
   }
-  case ReadSensors:
-  {
-    pinMode(VBAT_ADC_CTL, OUTPUT);
-    digitalWrite(VBAT_ADC_CTL, LOW);
-    voltage = analogRead(ADC) * 2;
-
-    /*
-     * Board, BoardPlus, Capsule, GPS and HalfAA variants
-     * have external 10K VDD pullup resistor
-     * connected to GPIO7 (USER_KEY / VBAT_ADC_CTL) pin
-     */
-    pinMode(VBAT_ADC_CTL, INPUT);
-
-    ambientTemperature = mlx.readAmbientTempC();
-    objectTemperature = mlx.readObjectTempC();
-
+  case STATES::READ_SENSORS:
+  {    
+    voltage = getBatteryVoltage();
+    ambientTemperature = getMedianValue<float>([]{return mlx.readAmbientTempC();});
+    objectTemperature = getMedianValue<float>([]{return mlx.readObjectTempC();});
+    
     Serial.print("Ambient = ");
     Serial.print(ambientTemperature);
     Serial.print("*C\tObject = ");
     Serial.print(objectTemperature);
     Serial.println("*C");
 
-    state = TX;
+    state = STATES::TX;
     break;
   }
   default:
@@ -136,15 +135,15 @@ void loop()
   Radio.IrqProcess();
 }
 
-void OnTxDone(void)
+void OnTxDone()
 {
   Serial.print("TX done!");
   turnOnRGB(0, 0);
 }
 
-void OnTxTimeout(void)
+void OnTxTimeout()
 {
   Radio.Sleep();
   Serial.print("TX Timeout......");
-  state = ReadSensors;
+  state = STATES::READ_SENSORS;
 }

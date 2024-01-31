@@ -12,7 +12,8 @@ enum class SensorType : uint8_t
 
 enum class SensorDataType : uint8_t
 {
-    floatType
+    floatType,
+    uint16_t
     // add a new data type here
 };
 
