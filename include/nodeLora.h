@@ -6,17 +6,9 @@
 
 #include <vector>
 #include <map>
-#include "sensor.h"
 
-uint8_t calculateXORChecksum(const uint8_t *data, uint16_t size)
-{
-    uint8_t checksum = 0;
-    for (size_t i = 0; i < size; i++)
-    {
-        checksum ^= data[i];
-    }
-    return checksum;
-}
+#include "debug.h"
+#include "sensor.h"
 
 enum class NodeCommand : uint8_t
 {
@@ -60,36 +52,23 @@ public:
 
     bool decode(uint8_t *payload, const uint16_t size)
     {
-        Serial.printf("\r\n");
+        debugf("\r\n");
         for (int i = 0; i < size; ++i)
         {
-            Serial.printf("%d ", payload[i]);
+            debugf("%d ", payload[i]);
         }
-        Serial.printf("\r\n");
+        debugf("\r\n");
 
         uint16_t minPayloadSize = sizeof(_fixedPropVec) + Sensor::getMinSize();
 
-        Serial.printf("minPayloadSize %d size %d\r\n", minPayloadSize, size);
+        debugf("minPayloadSize %d size %d\r\n", minPayloadSize, size);
 
-        Serial.printf("p0 %d\r\n", _fixedPropVec[0]);
-        Serial.printf("p1 %d\r\n", _fixedPropVec[1]);
+        debugf("p0 %d\r\n", _fixedPropVec[0]);
+        debugf("p1 %d\r\n", _fixedPropVec[1]);
 
         if (size < minPayloadSize || payload[0] != _fixedPropVec[0] || payload[1] != _fixedPropVec[1])
         {
-            Serial.printf("here1\r\n");
-            return false;
-        }
-
-        // checksum check
-        uint8_t actualCheckSum = calculateXORChecksum(payload, size - sizeof(actualCheckSum));
-        uint8_t payloadCheckSum = *(payload + size - sizeof(payloadCheckSum));
-
-        Serial.printf("sum0 %d\r\n", actualCheckSum);
-        Serial.printf("sum1 %d\r\n", payloadCheckSum);
-
-        if (payloadCheckSum != actualCheckSum)
-        {
-            Serial.printf("here2\r\n");
+            debugf("here1\r\n");
             return false;
         }
 
@@ -100,9 +79,7 @@ public:
         std::memcpy(_fixedPropVec.data(), payload + pos, _fixedPropVec.size());
         pos += _fixedPropVec.size();
 
-        const uint8_t sizeNoCheckSum = size - sizeof(payloadCheckSum);
-
-        while (pos < sizeNoCheckSum - 1)
+        while (pos < size - 1)
         {
             Sensor newSensor;
             pos += newSensor.copyFrom(payload + pos);
@@ -114,16 +91,12 @@ public:
 
     std::vector<uint8_t> encode()
     {
-        uint8_t checksum;
-
         uint16_t messageSize = sizeof(_fixedPropVec);
 
         for (const auto &attr : _sensors)
         {
             messageSize += attr.getSize();
         }
-
-        messageSize += sizeof(checksum);
 
         std::vector<uint8_t> outMessage(messageSize);
         uint16_t pos = 0;
@@ -136,15 +109,12 @@ public:
             pos += attr.copyTo(outMessage.data() + pos);
         }
 
-        checksum = calculateXORChecksum(outMessage.data(), outMessage.size() - sizeof(checksum));
-        memcpy(outMessage.data() + pos, &checksum, sizeof(checksum));
-
-        Serial.printf("\r\n");
+        debugf("\r\n");
         for (int i = 0; i < outMessage.size(); ++i)
         {
-            Serial.printf("%d ", outMessage[i]);
+            debugf("%d ", outMessage[i]);
         }
-        Serial.printf("\r\n");
+        debugf("\r\n");
 
         return outMessage;
     }

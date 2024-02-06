@@ -18,9 +18,9 @@ const std::map<SensorType, std::string> sensorTypeMap =
 
 class NodeMqtt
 {
-private:
+private:    
     std::string _deviceName = "custom node";
-    std::string _uniqueId = "626b3e3ff52"; // any randomly generated string
+    std::string _uniqueId = "IR_F27OaO4IIHGO0OOCAO"; // each node should have a unique id
     std::string _stateTopic;
 
     // Variable used for MQTT Discovery
@@ -80,7 +80,7 @@ void NodeMqtt::publishDiscovery(PubSubClient &mqttClient) const
 
         mqttClient.publish(_discoveryTopic.c_str(), strPayload.c_str());
 
-        Serial.println(strPayload);
+        debugln(strPayload);
     }
 }
 
@@ -89,7 +89,7 @@ std::list<std::string> NodeMqtt::publishState(PubSubClient &mqttClient) const
     std::list<std::string> outList;
     JsonDocument payload;
 
-    Serial.println("publishState");
+    debugln("publishState");
     for (int i = 0; i < _nodeLora._sensors.size(); ++i)
     {
         const auto &sensor = _nodeLora._sensors[i];
@@ -120,7 +120,7 @@ std::list<std::string> NodeMqtt::publishState(PubSubClient &mqttClient) const
         break;
 
         default:
-            Serial.println("ERROR: Unknown data type");
+            debugln("ERROR: Unknown data type");
         }
     }
 
@@ -129,7 +129,7 @@ std::list<std::string> NodeMqtt::publishState(PubSubClient &mqttClient) const
 
     mqttClient.publish(_stateTopic.c_str(), strPayload.c_str());
 
-    Serial.println(strPayload);
+    debugln(strPayload);
 
     return outList;
 }

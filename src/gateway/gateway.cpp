@@ -9,6 +9,7 @@
 #include "nodeMqtt.h"
 #include "nodeLora.h"
 #include "loraSettings.h"
+#include "debug.h"
 
 // Check if secrets.h exists
 #ifdef __has_include
@@ -52,18 +53,18 @@ void messageLog(const char *msg)
 
 void MqttReceiverCallback(char *topic, byte *inFrame, unsigned int length)
 {
-  Serial.print("Message arrived on topic: ");
-  Serial.print(topic);
-  Serial.print(". Message: ");
+  debug("Message arrived on topic: ");
+  debug(topic);
+  debug(". Message: ");
 
   std::string messageTemp;
 
   for (int i = 0; i < length; i++)
   {
-    Serial.print((char)inFrame[i]);
+    debug((char)inFrame[i]);
     messageTemp += (char)inFrame[i];
   }
-  Serial.println();
+  debugln();
 
   if (std::string(topic) == std::string("homeassistant/status"))
   {
@@ -97,6 +98,8 @@ void initLora()
                     LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
                     LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
                     0, true, 0, 0, LORA_IQ_INVERSION_ON, true);
+
+  Radio.RxBoosted(0);
 }
 
 void initMqtt()
@@ -118,12 +121,12 @@ bool connectMqtt()
   while (!mqttClient.connected() && attempts < 10)
   {
     messageLog("Connecting to MQTT...");
-    Serial.print("Attempting MQTT connection...");
+    debug("Attempting MQTT connection...");
     // Attempt to connect
     if (mqttClient.connect("ESP32Client", MQTT_USER, MQTT_PASSWORD))
     {
       messageLog("Connected to MQTT... ");
-      Serial.println("connected");
+      debugln("connected");
 
       mqttClient.subscribe("homeassistant/status");
       return true;
@@ -131,9 +134,9 @@ bool connectMqtt()
     else
     {
       messageLog("Failed to connect to MQTT");
-      Serial.print("failed, rc=");
-      Serial.print(mqttClient.state());
-      Serial.println(" try again in 5 seconds");
+      debug("failed, rc=");
+      debug(mqttClient.state());
+      debugln(" try again in 5 seconds");
       delay(5000);
     }
 
@@ -147,22 +150,26 @@ void initDisplay()
 {
   display.init();
   display.flipScreenVertically();
-  display.setFont(ArialMT_Plain_10);  
+  display.setFont(ArialMT_Plain_10);
   display.clear();
   display.drawString(0, 0, "Hello!");
   display.display();
   delay(1000);
 }
 
+const int prgBtnPin = 0; // PRG button
+
 void setup()
 {
-  Serial.begin(115200);
+  Debug::setup();
   // WIFI Kit series V1 not support Vext control
   Mcu.begin();
 
   initDisplay();
   initLora();
   initMqtt();
+
+  pinMode(prgBtnPin, INPUT);
 }
 
 bool connectWiFi()
@@ -174,7 +181,7 @@ bool connectWiFi()
 
   messageLog("Connecting to WiFi");
 
-  Serial.println("Connecting to WiFi");
+  debugln("Connecting to WiFi");
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -182,23 +189,23 @@ bool connectWiFi()
   while (WiFi.status() != WL_CONNECTED && attempts < 10)
   {
     delay(1000);
-    Serial.print(".");
+    debug(".");
     attempts++;
   }
 
   if (WiFi.status() == WL_CONNECTED)
   {
     messageLog("Connected to WiFi");
-    Serial.println("Connected to WiFi");
-    Serial.print(" IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.println();
+    debugln("Connected to WiFi");
+    debug(" IP: ");
+    debugln(WiFi.localIP());
+    debugln();
     return true;
   }
   else
   {
     messageLog("WiFi Failed");
-    Serial.println("Failed to connect to WiFi. Please check your credentials.");
+    debugln("Failed to connect to WiFi. Please check your credentials.");
   }
   // ESP.restart();
   return false;
@@ -210,7 +217,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
   if (!nodeLora.decode(payload, size))
   {
-    Serial.printf("Can't decode the payload\r\n");
+    debugf("Can't decode the payload\r\n");
     return;
   }
 
@@ -238,7 +245,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
   listOfSensors.insert(listOfSensors.end(), newSensorsList.begin(), newSensorsList.end());
 
   Radio.Sleep();
-  Serial.printf("\r\nreceived packet \"%s\" with Rssi %d , length %d\r\n", payload, rssi, size);
+  debugf("\r\nreceived packet \"%s\" with Rssi %d , length %d\r\n", payload, rssi, size);
 }
 
 void loop()
@@ -263,13 +270,22 @@ void loop()
     displayLines[0] = "MQTT connected";
   }
 
+  int prgBtnState = digitalRead(prgBtnPin);
+
+  if (prgBtnState == LOW)
+  {
+    debugln("Button is pressed!");
+    displayLines[1] = "Button is pressed!";
+    // Perform actions when the button is pressed
+  }
+
   int i = 1;
   for (auto line : listOfSensors)
   {
     displayLines[i] = line.c_str();
     i++;
 
-    if (i >= displayLines.size() )
+    if (i >= displayLines.size())
     {
       break;
     }
@@ -282,7 +298,7 @@ void loop()
 
   for (auto line : listOfSensors)
   {
-    Serial.printf("ss %s \r\n", line.c_str());
+    debugf("ss %s \r\n", line.c_str());
   }
 
   auto durationSinceLastUpdate = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::steady_clock::now() - lastUpdateTime).count();

@@ -1,6 +1,3 @@
-#ifndef ArduinoMedianFilter_h
-#define ArduinoMedianFilter_h
-
 /*
   Copyright(c) 2024 Rustam Iskenderov
 
@@ -26,6 +23,9 @@
 /*
   High performance and low memory usage sorting algorithm for running median filter.
 */
+
+#ifndef ArduinoMedianFilter_h
+#define ArduinoMedianFilter_h
 
 template <typename T, unsigned int _size>
 class MedianFilter
