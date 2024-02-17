@@ -18,7 +18,7 @@ const std::map<SensorType, std::string> sensorTypeMap =
 
 class NodeMqtt
 {
-private:    
+private:
     std::string _deviceName = "custom node";
     std::string _uniqueId = "IR_F27OaO4IIHGO0OOCAO"; // each node should have a unique id
     std::string _stateTopic;
@@ -113,8 +113,8 @@ std::list<std::string> NodeMqtt::publishState(PubSubClient &mqttClient) const
 
         case SensorDataType::uint16_t:
         {
-            uint16_t value = *reinterpret_cast<const uint16_t*>(sensor.getData().data());
-            payload[jsonValueName] = value;            
+            uint16_t value = *reinterpret_cast<const uint16_t *>(sensor.getData().data());
+            payload[jsonValueName] = value;
             outList.emplace_back(jsonValueName + "=" + std::to_string(value) + " " + sensor.getDataUnit());
         }
         break;

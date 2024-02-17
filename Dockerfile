@@ -5,7 +5,6 @@ RUN apt update && apt install -y git
 # Install PlatformIO Core
 RUN python3 -m pip install -U platformio
 
-# Clone MarlinFirmware repository, checkout latest release tag
 WORKDIR /home/platformio
 RUN git clone https://github.com/rusty-labs/lora-mqtt-gateway.git
 
