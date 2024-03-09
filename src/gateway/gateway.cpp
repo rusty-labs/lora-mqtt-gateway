@@ -2,6 +2,7 @@
 
 #include "Arduino.h"
 
+#include "button.h"
 #include "debug.h"
 #include "displayExt.h"
 #include "loraSettings.h"
@@ -23,14 +24,16 @@ constexpr int TIME_DURATION_FOR_RESET_SEC = 10;
 
 std::array<String, 5> displayLines;
 
+// PRG button pin is 0
+Button usrBtn(0);
+
 enum class STATES : uint8_t
 {
   PROCESSING,
   BINDING,
-  RESET,
-  BUTTON_PRESSED
+  RESET
 };
-STATES g_state;
+STATES g_state = STATES::PROCESSING;
 
 void restartESP()
 {
@@ -53,8 +56,6 @@ void initLora()
   Radio.RxBoosted(0);
 }
 
-const int prgBtnPin = 0; // PRG button
-
 void setup()
 {
   Debug::setup();
@@ -68,7 +69,18 @@ void setup()
   wifiManagerExt.setup();
   mqttManager.setup();
 
-  pinMode(prgBtnPin, INPUT);
+  usrBtn.setup();
+
+  usrBtn.setOnReleaseCallback([&](int64_t durationSincePressed)
+                              {
+                                if (durationSincePressed > TIME_DURATION_FOR_RESET_SEC)
+                                {
+                                  g_state = STATES::RESET;
+                                }
+                                else if (durationSincePressed > TIME_DURATION_FOR_BIND_SEC)
+                                {
+                                  g_state = STATES::BINDING;
+                                } });
 }
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
@@ -100,6 +112,10 @@ void handleStateProcessing()
     restartESP();
   }
 
+  mqttManager.loop();
+  Radio.Rx(0);
+  Radio.IrqProcess();
+
   int i = 1;
   for (auto line : listOfSensors)
   {
@@ -119,52 +135,25 @@ void handleStateProcessing()
 
   for (auto line : listOfSensors)
   {
-    debugf("ss %s \r\n", line.c_str());
+    // debugf("ss %s \r\n", line.c_str());
   }
 
   auto durationSinceLastUpdate = std::chrono::duration_cast<std::chrono::minutes>(std::chrono::steady_clock::now() - lastUpdateTime).count();
   displayLines[0] = (std::string("Last update ") + std::to_string(durationSinceLastUpdate) + " min ago").c_str();
 
-  int prgBtnState = digitalRead(prgBtnPin);
-  if (prgBtnState == LOW)
-  {
-    debugln("Button is pressed!");
-    btnHoldTime = std::chrono::steady_clock::now();
-    g_state = STATES::BUTTON_PRESSED;
-  }
+  usrBtn.process();
 
-  mqttManager.loop();
-  Radio.Rx(0);
-  Radio.IrqProcess();
-
-  displayExt.printLines(displayLines);
-}
-
-void handleStateButtons()
-{
-  int prgBtnState = digitalRead(prgBtnPin);
-  auto durationSincePressed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - btnHoldTime).count();
-  if (prgBtnState == HIGH)
-  {
-    debugln("Button is released!");
-
-    if (durationSincePressed > TIME_DURATION_FOR_RESET_SEC)
-    {
-      g_state = STATES::RESET;
-    }
-    else if (durationSincePressed > TIME_DURATION_FOR_BIND_SEC)
-    {
-      g_state = STATES::BINDING;
-    }
-  }
-
-  if (durationSincePressed > TIME_DURATION_FOR_RESET_SEC)
+  if (usrBtn.secondsSincePressed() > TIME_DURATION_FOR_RESET_SEC)
   {
     displayExt.printLn("-> Release to RESET");
   }
-  else if (durationSincePressed > TIME_DURATION_FOR_BIND_SEC)
+  else if (usrBtn.secondsSincePressed() > TIME_DURATION_FOR_BIND_SEC)
   {
     displayExt.printLn("-> Release to bind");
+  }
+  else
+  {
+    displayExt.printLines(displayLines);
   }
 }
 
@@ -176,18 +165,13 @@ void loop()
     handleStateProcessing();
     break;
   case STATES::BINDING:
+    g_state = STATES::PROCESSING;
     break;
   case STATES::RESET:
     wifiManagerExt.resetSettings();
     restartESP();
     break;
-  case STATES::BUTTON_PRESSED:
-    handleStateButtons();
-    break;
   }
 
   delay(100);
-
-  debug("ESP.getFreeHeap(): ");
-  debugln(ESP.getFreeHeap());
 }

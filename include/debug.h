@@ -1,7 +1,7 @@
 #ifndef debug_h
 #define debug_h
 
-// #define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define debug(x) Serial.print(x)

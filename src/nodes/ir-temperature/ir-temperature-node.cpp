@@ -6,12 +6,12 @@
 #include "LoRaWan_APP.h"
 #include "Wire.h"
 
+#include "button.h"
 #include "debug.h"
 #include "loraSettings.h"
 #include "medianFilter.h"
 #include "nodeLora.h"
 #include "utils.h"
-
 
 Adafruit_MLX90614 g_Mlx = Adafruit_MLX90614();
 /*
@@ -41,9 +41,11 @@ namespace SENSORS_DATA
   float ambientTemperature = 0;
 }
 bool g_sendDiscovery = true;
-constexpr uint32_t g_updateIntervalMs = 60000;
+uint32_t g_updateIntervalMs;
 
-const int userBtnPin = USER_KEY; // USER button
+uint32_t g_lastUpdateTimeMs;
+
+Button usrBtn(USER_KEY); // USER button
 
 void initMlx()
 {
@@ -79,7 +81,19 @@ void setup()
 
   initMlx();
 
-  pinMode(userBtnPin, INPUT);
+  usrBtn.setup();
+
+  usrBtn.setOnReleaseCallback([&](int64_t durationSincePressed)
+                              { 
+                                g_state = STATES::READ_SENSORS; 
+                                debugln("Button is pressed!"); });
+
+  delay(5000);
+  g_lastUpdateTimeMs = millis();
+  g_updateIntervalMs = getSpreadDelay(60000);
+
+  debugf("milis %d", g_lastUpdateTimeMs);
+  debugf("g_updateIntervalMs %d", g_updateIntervalMs);
 }
 
 template <class T>
@@ -95,6 +109,8 @@ T getMedianValue(std::function<T()> getValueFunction)
 
 void loop()
 {
+  usrBtn.process();
+
   switch (g_state)
   {
   case STATES::SEND_DATA:
@@ -118,9 +134,15 @@ void loop()
   }
   case STATES::LOW_POWER:
   {
-    lowPowerHandler(); // LowPower time
-    delay(getSpreadDelay(g_updateIntervalMs));
-    g_state = STATES::READ_SENSORS;
+    // lowPowerHandler();
+
+    if (millis() - g_lastUpdateTimeMs > g_updateIntervalMs)
+    {
+      g_lastUpdateTimeMs = millis();
+      g_updateIntervalMs = getSpreadDelay(60000);
+      g_state = STATES::READ_SENSORS;
+    }
+
     break;
   }
   case STATES::READ_SENSORS:
@@ -143,17 +165,6 @@ void loop()
   default:
     break;
   }
-
-  /*
-    delay(100);
-    int userBtnState = digitalRead(userBtnPin);
-
-    if (userBtnState == LOW)
-    {
-      debugln("Button is pressed!");
-      // Perform actions when the button is pressed
-    }
-  */
 
   Radio.IrqProcess();
 }
